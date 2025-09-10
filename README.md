@@ -1,54 +1,78 @@
-# ajam-launchctl
+# lunchctl
 
-A Rust crate for working with macOS launch agents via `launchctl`, providing an easy way to create, manage, and control background processes on macOS.
+Lightweight Rust library for creating and controlling macOS Launch Agents (launchd) via `launchctl`. It helps you generate plist files in `~/Library/LaunchAgents`, start/stop agents, and query their state.
 
 ## Features
 
-- Create and configure launch agents
-- Manage launch agent autostart behavior
-- Bootstrap (start) and bootout (stop) launch agents
-- Check if a launch agent is running
-- Read and write launch agent configurations as plist files
+- Create and serialize Launch Agents to plist
+- Bootstrap (start) and bootout (stop) agents via `launchctl`
+- Check agent running state
+- Read existing agent configs from disk
+- Small, focused API
 
-## Usage
+## Installation
 
-### Creating a Launch Agent
+Add the dependency to your `Cargo.toml`:
 
-```rust
-use ajam_launchctl::{LaunchAgent, LaunchControllable};
-
-// Create a new launch agent
-let mut agent = LaunchAgent::new("com.example.myapp");
-
-// Configure the agent
-agent.program_arguments = vec!["myapp".to_string(), "--daemon".to_string()];
-agent.run_at_load = true;  // Start at login
-agent.keep_alive = true;   // Restart if process exits
-
-// Write the configuration to ~/Library/LaunchAgents/
-agent.write().expect("Failed to write launch agent configuration");
-
-// Bootstrap (start) the agent
-agent.bootstrap().expect("Failed to bootstrap agent");
-
-// Check if running
-let is_running = agent.is_running().expect("Failed to check agent status");
-println!("Agent running: {}", is_running);
-
-// Stop the agent
-agent.boot_out().expect("Failed to stop agent");
+```toml
+[dependencies]
+lunchctl = { git = "https://github.com/mishamyrt/lunchctl" }
 ```
 
-### Reading an Existing Launch Agent
+## Quick start
 
 ```rust
-use ajam_launchctl::LaunchAgent;
+use lunchctl::{LaunchAgent, LaunchControllable};
 
-if LaunchAgent::exists("com.example.myapp") {
-    let agent = LaunchAgent::from_file("com.example.myapp")
-        .expect("Failed to read launch agent");
-    
-    println!("Program arguments: {:?}", agent.program_arguments);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Use a unique label for your job (maps to ~/Library/LaunchAgents/<label>.plist)
+    let mut agent = LaunchAgent::new("co.example.myapp");
+
+    // A harmless long-running command for demonstration
+    agent.program_arguments = vec![
+        "/usr/bin/tail".to_string(), "-f".to_string(), "/dev/null".to_string()
+    ];
+    agent.run_at_load = true;
+    agent.keep_alive = true;
+
+    // Write, start, check, then stop and remove
+    agent.write()?;
+    agent.bootstrap()?;
+    println!("Running: {}", agent.is_running()?);
+    agent.boot_out()?;
+    agent.remove()?;
+
+    Ok(())
 }
 ```
+
+## Read an existing agent
+
+```rust
+use lunchctl::LaunchAgent;
+
+if LaunchAgent::exists("co.example.myapp") {
+    let agent = LaunchAgent::from_file("co.example.myapp")?;
+    println!("Args: {:?}", agent.program_arguments);
+}
+```
+
+## Examples
+
+- Basic end-to-end example: [`examples/basic.rs`](examples/basic.rs)
+
+Run with:
+
+```bash
+cargo run --example basic
+```
+
+## Requirements
+
+- macOS with `launchctl`
+- The library writes plist files to `~/Library/LaunchAgents` for the current user
+
+## License
+
+MIT — see [`LICENSE`](LICENSE) for details.
 
