@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use derive_builder::Builder;
 
 use serde::{Deserialize, Serialize};
 
@@ -20,15 +21,85 @@ pub(crate) const DEV_NULL: &str = "/dev/null";
 ///
 /// More information:
 /// [`https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html`](Apple Developer Documentation)
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Clone, Serialize, Builder)]
 #[serde(rename_all = "PascalCase")]
 pub struct LaunchAgent {
+    #[builder(setter(into))]
     pub label: String,
+
+    #[builder(default, setter(each = "arg"))]
     pub program_arguments: Vec<String>,
-    pub standard_out_path: String,
-    pub standard_error_path: String,
+
+    #[builder(default = "PathBuf::from(DEV_NULL)", setter(into))]
+    pub standard_out_path: PathBuf,
+
+    #[builder(default = "PathBuf::from(DEV_NULL)", setter(into))]
+    pub standard_error_path: PathBuf,
+
+    #[builder(default)]
     pub keep_alive: bool,
+
+    #[builder(default)]
     pub run_at_load: bool,
+
+    #[builder(default)]
+    pub process_type: ProcessType,
+}
+
+#[derive(Clone)]
+pub enum ProcessType {
+    /// Background jobs are generally processes that do work that was not
+    /// directly requested by the user. The resource limits applied to
+    /// Background jobs are intended to prevent them from disrupting the
+    /// user experience.
+    Background,
+    /// Standard jobs are equivalent to no `ProcessType` being set.
+    Standard,
+    /// Adaptive jobs move between the Background and Interactive classifications
+    /// based on activity over XPC connections.
+    Adaptive,
+    /// Interactive jobs run with the same resource limitations as apps,
+    /// that is to say, none. Interactive jobs are critical to maintaining
+    /// a responsive user experience, and this key should only be used if
+    /// an app's ability to be responsive depends on it, and cannot be made
+    /// Adaptive.
+    Interactive,
+}
+
+impl Default for ProcessType {
+    fn default() -> Self {
+        Self::Standard
+    }
+}
+
+impl Serialize for ProcessType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(match self {
+            Self::Background => "background",
+            Self::Standard => "standard",
+            Self::Adaptive => "adaptive",
+            Self::Interactive => "interactive",
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for ProcessType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "background" => Self::Background,
+            "standard" => Self::Standard,
+            "adaptive" => Self::Adaptive,
+            "interactive" => Self::Interactive,
+            _ => return Err(serde::de::Error::custom("invalid process type")),
+        })
+    }
 }
 
 impl LaunchAgent {
@@ -37,10 +108,11 @@ impl LaunchAgent {
         Self {
             label: label.to_string(),
             program_arguments: vec![],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         }
     }
 
@@ -109,10 +181,11 @@ mod tests {
         let agent = LaunchAgent {
             label: "co.myrt.ajam".to_string(),
             program_arguments: vec!["ajam".to_string(), "run".to_string()],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         };
 
         let mut buf = BufWriter::new(Vec::new());
@@ -137,10 +210,11 @@ mod tests {
         let agent = LaunchAgent {
             label: "co.myrt.ajam".to_string(),
             program_arguments: vec![],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         };
         let path = PathBuf::from("Library/LaunchAgents/co.myrt.ajam.plist");
         let abs_path = PathBuf::from(std::env::var("HOME").unwrap()).join(path);
@@ -154,10 +228,11 @@ mod tests {
         let agent = LaunchAgent {
             label,
             program_arguments: vec![],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         };
         let path = agent.path();
 
@@ -173,10 +248,11 @@ mod tests {
         let agent = LaunchAgent {
             label,
             program_arguments: vec![],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         };
         let path = agent.path();
 
@@ -193,10 +269,11 @@ mod tests {
         let agent = LaunchAgent {
             label: label.clone(),
             program_arguments: vec![],
-            standard_out_path: DEV_NULL.to_string(),
-            standard_error_path: DEV_NULL.to_string(),
+            standard_out_path: PathBuf::from(DEV_NULL),
+            standard_error_path: PathBuf::from(DEV_NULL),
             keep_alive: false,
             run_at_load: false,
+            process_type: ProcessType::default(),
         };
 
         assert!(!LaunchAgent::exists(&label));
