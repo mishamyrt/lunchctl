@@ -5,7 +5,7 @@ mod agent;
 mod os;
 
 pub use control::LaunchControllable;
-pub use agent::LaunchAgent;
+pub use agent::{LaunchAgent, ProcessType};
 
 /// Error types for Launch Agent configuration.
 #[derive(Error, Debug)]
